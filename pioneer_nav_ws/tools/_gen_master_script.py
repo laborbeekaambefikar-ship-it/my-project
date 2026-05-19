@@ -172,6 +172,11 @@ write_file() {
 write_all_files() {
   say "Writing files into ${WS_DIR}"
   mkdir -p "${WS_DIR}"
+  # Create empty placeholder directories that CMake install() expects but
+  # contain no files (so the generator never writes them).
+  mkdir -p "${WS_DIR}/src/scoutbot_description/meshes"
+  mkdir -p "${WS_DIR}/src/scoutbot_simulation/models"
+  mkdir -p "${WS_DIR}/docs"
 
 '''
 
