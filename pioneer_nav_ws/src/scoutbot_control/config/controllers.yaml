@@ -1,0 +1,112 @@
+# =============================================================================
+# controllers.yaml
+# Loaded inside Gazebo by the gazebo_ros2_control plugin (URDF <parameters>).
+# Defines the controller_manager and two controllers:
+#   * scoutbot_joint_broadcaster (publishes joint_states)
+#   * scoutbot_base_controller   (diff_drive_controller)
+#
+# CRITICAL DESIGN NOTE
+# --------------------
+# Every parameter that also appears in the URDF (wheel_radius, wheel_separation)
+# must match the URDF's xacro:property values exactly. Mismatch causes silent
+# odometry drift, which was a documented failure of the previous project.
+# =============================================================================
+
+# Top-level node name. The /scoutbot namespace prefix comes from the
+# gazebo_ros2_control plugin's <namespace> tag in scoutbot.urdf.xacro,
+# so the fully qualified node is /scoutbot/controller_manager.
+controller_manager:
+  ros__parameters:
+    # Hard-locked control loop rate. Must be >= the navigator's 50 Hz output
+    # rate; we run 100 Hz so commands are not dropped by under-sampling.
+    update_rate: 100  # Hz
+
+    # ---- controller registry --------------------------------------------------
+    scoutbot_joint_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    scoutbot_base_controller:
+      type: diff_drive_controller/DiffDriveController
+
+
+# =============================================================================
+# scoutbot_joint_broadcaster
+# Reads joint state interfaces and republishes /scoutbot/joint_states. RSP
+# consumes that to broadcast the rest of the TF tree.
+# =============================================================================
+scoutbot_joint_broadcaster:
+  ros__parameters:
+    # Empty list -> broadcast every joint declared in <ros2_control>.
+    joints: []
+    extra_joints: []
+
+
+# =============================================================================
+# scoutbot_base_controller (diff_drive_controller)
+# Subscribes:  /scoutbot/cmd_vel       (geometry_msgs/Twist)        (remapped below)
+# Publishes:   /scoutbot/odom          (nav_msgs/Odometry)          (remapped below)
+# Broadcasts:  TF: scout_odom -> scout_base_footprint
+# =============================================================================
+scoutbot_base_controller:
+  ros__parameters:
+
+    # ---- joints (must match URDF <ros2_control>) -----------------------------
+    left_wheel_names:  ["scout_left_wheel_joint"]
+    right_wheel_names: ["scout_right_wheel_joint"]
+
+    # ---- kinematics (must match URDF xacro:properties) -----------------------
+    wheel_separation: 0.40   # [m] track width
+    wheel_radius:     0.10   # [m]
+
+    # If the simulator's reported separation/radius differ slightly from URDF
+    # (e.g., due to URDF rounding), these multipliers compensate. Default 1.0.
+    wheel_separation_multiplier: 1.0
+    left_wheel_radius_multiplier:  1.0
+    right_wheel_radius_multiplier: 1.0
+
+    # ---- topic remaps --------------------------------------------------------
+    # diff_drive_controller default is /<ns>/<controller_name>/cmd_vel_unstamped
+    # which is awkward. Use the conventional /scoutbot/cmd_vel and /scoutbot/odom.
+    # The 'tf' frames are absolute (no namespace prefix) by design.
+    publish_rate: 50.0          # [Hz] odom + TF publish rate
+    odom_frame_id:  scout_odom
+    base_frame_id:  scout_base_footprint
+    pose_covariance_diagonal:  [0.001, 0.001, 0.0, 0.0, 0.0, 0.01]
+    twist_covariance_diagonal: [0.001, 0.001, 0.0, 0.0, 0.0, 0.01]
+
+    # Source of truth for TF: the controller publishes scout_odom -> scout_base_footprint.
+    # RSP publishes the static chain scout_base_footprint -> {wheels, sensors}.
+    # No other publisher writes scout_odom -> scout_base_footprint.
+    enable_odom_tf: true
+    open_loop: false                  # use measured wheel velocities
+    position_feedback: true
+
+    # ---- velocity / acceleration limits --------------------------------------
+    # These are hard caps applied AFTER the navigator's PID. They protect the
+    # robot from any runaway PID output (defense in depth).
+    linear:
+      x:
+        has_velocity_limits:    true
+        has_acceleration_limits: true
+        has_jerk_limits:        false
+        max_velocity:        1.0   # [m/s]
+        min_velocity:       -1.0
+        max_acceleration:    1.5   # [m/s^2]
+        min_acceleration:   -1.5
+    angular:
+      z:
+        has_velocity_limits:    true
+        has_acceleration_limits: true
+        has_jerk_limits:        false
+        max_velocity:        2.0   # [rad/s]
+        min_velocity:       -2.0
+        max_acceleration:    3.0   # [rad/s^2]
+        min_acceleration:   -3.0
+
+    # ---- safety: stop if no command for cmd_vel_timeout seconds --------------
+    cmd_vel_timeout: 0.5             # [s]
+
+    # The unstamped Twist topic is what teleop_twist_keyboard publishes by default;
+    # the ros2_humble diff_drive_controller subscribes to it under the controller
+    # name. We rely on a launch-time 'remap' to expose it as /scoutbot/cmd_vel.
+    use_stamped_vel: false

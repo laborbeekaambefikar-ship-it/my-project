@@ -1,0 +1,59 @@
+# =============================================================================
+# pid_gains.yaml
+# Gains and thresholds for the navigator's two PID loops, plus state-machine
+# tuning. Loaded by waypoint_navigator at start-up via declare_parameter().
+#
+# Ranges and units are documented per parameter. Defaults are tuned for:
+#   wheel_radius     = 0.10 m
+#   wheel_separation = 0.40 m
+#   chassis_mass     = 6.0  kg
+#   max linear  = 1.0 m/s, max angular = 2.0 rad/s   (matches controllers.yaml)
+# =============================================================================
+
+waypoint_navigator:
+  ros__parameters:
+
+    # ---- topic / frame configuration -----------------------------------------
+    odom_topic:      /scoutbot/odom
+    cmd_vel_topic:   /scoutbot/cmd_vel
+    status_topic:    /scoutbot/nav_status
+    odom_frame:      scout_odom
+
+    # ---- timing --------------------------------------------------------------
+    control_frequency_hz:  50.0   # control-loop rate. 50 Hz is well below the
+                                  # 100 Hz CM update_rate, so no command is dropped.
+    status_publish_hz:      2.0   # diagnostic publish rate. Decoupled from
+                                  # control loop -> no terminal flooding.
+
+    # ---- linear PID (input: distance_to_goal [m], output: v [m/s]) -----------
+    linear_kp: 0.8
+    linear_ki: 0.0    # integral kept off; distance always >= 0 so windup risk
+    linear_kd: 0.05
+    linear_max_output:    1.0     # hard ceiling [m/s] -- matches controllers.yaml
+    linear_min_output:    0.0     # never reverse during DRIVE
+    linear_integral_clamp: 0.5    # |i_term| <= this
+    linear_deadband:      0.01    # |output| < this -> 0  (kills jitter)
+
+    # ---- angular PID (input: heading_error [rad], output: omega [rad/s]) ----
+    angular_kp: 1.5
+    angular_ki: 0.0
+    angular_kd: 0.10
+    angular_max_output:    2.0    # [rad/s] -- matches controllers.yaml
+    angular_min_output:   -2.0
+    angular_integral_clamp: 0.8
+    angular_deadband:      0.02   # [rad/s]
+
+    # ---- state-machine thresholds (asymmetric -> hysteresis -> no oscillation)
+    align_enter_threshold: 0.40   # [rad]   DRIVE  -> ALIGN_HEADING when |err| >=
+    align_exit_threshold:  0.05   # [rad]   ALIGN_HEADING -> DRIVE  when |err| <=
+    goal_enter_threshold:  0.30   # [m]     DRIVE  -> FINE_APPROACH when dist <=
+    goal_tolerance:        0.05   # [m]     FINE_APPROACH -> REACHED when dist <=
+    final_yaw_tolerance:   0.05   # [rad]   ALIGN_FINAL -> next waypoint
+
+    # ---- fine-approach speeds (gentler -> no overshoot at the goal) ---------
+    fine_approach_max_linear:  0.20   # [m/s]
+    fine_approach_max_angular: 0.80   # [rad/s]
+
+    # ---- safety --------------------------------------------------------------
+    odom_stale_timeout: 1.0       # [s] If no odom for this long, stop the robot
+                                  # and log an error (throttled).

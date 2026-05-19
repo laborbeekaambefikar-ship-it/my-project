@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>scoutbot_description</name>
+  <version>0.1.0</version>
+  <description>
+    URDF/xacro description of the scoutbot differential-drive AGV.
+    Defines a 0.40 m wheelbase chassis with two driven wheels + one rear caster.
+    Includes ros2_control hardware interface and the gazebo_ros2_control plugin
+    so that controllers from scoutbot_control can be loaded by Gazebo at startup.
+  </description>
+  <maintainer email="dev@example.com">scoutbot maintainer</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>gazebo_ros2_control</exec_depend>
+  <exec_depend>ros2_control</exec_depend>
+  <exec_depend>ros2_controllers</exec_depend>
+  <exec_depend>scoutbot_control</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
