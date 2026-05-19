@@ -1,0 +1,262 @@
+<?xml version="1.0"?>
+<!-- ============================================================================
+     scoutbot.urdf.xacro
+     Master xacro file for the scoutbot differential-drive AGV.
+     Includes: chassis, wheels, sensor stub, ros2_control hardware interface,
+               and the gazebo_ros2_control plugin that loads controllers.yaml.
+     ============================================================================ -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="scoutbot">
+
+  <!-- =========================================================================
+       Macro arguments. Override at command line: xacro scoutbot.urdf.xacro arg:=val
+       ========================================================================= -->
+  <xacro:arg name="use_sim"          default="true"/>
+  <xacro:arg name="controllers_yaml" default="$(find scoutbot_control)/config/controllers.yaml"/>
+
+  <!-- =========================================================================
+       Geometric constants. Single source of truth for both visual/collision
+       and the diff_drive_controller's wheel_separation/wheel_radius parameters.
+       Keep these in sync with controllers.yaml.
+       ========================================================================= -->
+  <xacro:property name="wheel_radius"      value="0.10"/>   <!-- 10 cm -->
+  <xacro:property name="wheel_thickness"   value="0.04"/>
+  <xacro:property name="wheel_separation"  value="0.40"/>   <!-- track width, m -->
+  <xacro:property name="chassis_length"    value="0.50"/>
+  <xacro:property name="chassis_width"     value="0.30"/>
+  <xacro:property name="chassis_height"    value="0.20"/>
+  <xacro:property name="chassis_mass"      value="6.0"/>
+  <xacro:property name="wheel_mass"        value="0.5"/>
+  <xacro:property name="caster_radius"     value="0.04"/>
+  <xacro:property name="caster_mass"       value="0.10"/>
+
+  <!-- Place wheels on the chassis side, at chassis_height/2 down so wheel
+       bottom aligns with chassis bottom. -->
+  <xacro:property name="wheel_z_offset"   value="${-chassis_height/2 + wheel_radius}"/>
+
+  <!-- =========================================================================
+       Reusable inertial macro: solid box.
+       ========================================================================= -->
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m*(y*y + z*z)/12.0}" ixy="0" ixz="0"
+        iyy="${m*(x*x + z*z)/12.0}" iyz="0"
+        izz="${m*(x*x + y*y)/12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- Solid cylinder along Y axis (the wheel rotation axis). -->
+  <xacro:macro name="cylinder_inertia_y" params="m r l">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m*(3*r*r + l*l)/12.0}" ixy="0" ixz="0"
+        iyy="${m*r*r/2.0}"            iyz="0"
+        izz="${m*(3*r*r + l*l)/12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- Solid sphere. -->
+  <xacro:macro name="sphere_inertia" params="m r">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${2*m*r*r/5.0}" ixy="0" ixz="0"
+        iyy="${2*m*r*r/5.0}" iyz="0"
+        izz="${2*m*r*r/5.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- =========================================================================
+       LINK: scout_base_footprint - a virtual frame on the floor directly
+       below the geometric center of the chassis. Conventional REP-105 root
+       for mobile robots. The diff_drive_controller treats this as base_frame.
+       ========================================================================= -->
+  <link name="scout_base_footprint"/>
+
+  <!-- =========================================================================
+       LINK: scout_base_link - the rigid chassis box.
+       Origin is at the geometric center of the box, lifted to wheel-axle height.
+       ========================================================================= -->
+  <link name="scout_base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="scout_blue">
+        <color rgba="0.20 0.40 0.85 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <xacro:box_inertia m="${chassis_mass}"
+                       x="${chassis_length}"
+                       y="${chassis_width}"
+                       z="${chassis_height}"/>
+  </link>
+
+  <!-- footprint -> base_link: lift chassis so wheel bottoms touch the ground. -->
+  <joint name="scout_base_to_footprint" type="fixed">
+    <parent link="scout_base_footprint"/>
+    <child  link="scout_base_link"/>
+    <origin xyz="0 0 ${wheel_radius + chassis_height/2}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- =========================================================================
+       MACRO: drive_wheel
+       Reused for left and right. side_y: +half_separation for left, -half for right.
+       joint_name must match controllers.yaml: scout_left_wheel_joint / scout_right_wheel_joint.
+       ========================================================================= -->
+  <xacro:macro name="drive_wheel" params="prefix side_y joint_name">
+    <link name="scout_${prefix}_wheel_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_thickness}"/>
+        </geometry>
+        <material name="scout_black">
+          <color rgba="0.05 0.05 0.05 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_thickness}"/>
+        </geometry>
+      </collision>
+      <xacro:cylinder_inertia_y m="${wheel_mass}"
+                                r="${wheel_radius}"
+                                l="${wheel_thickness}"/>
+    </link>
+
+    <joint name="${joint_name}" type="continuous">
+      <parent link="scout_base_link"/>
+      <child  link="scout_${prefix}_wheel_link"/>
+      <origin xyz="0 ${side_y} ${wheel_z_offset}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.05" friction="0.05"/>
+      <limit effort="20.0" velocity="20.0"/>
+    </joint>
+
+    <!-- Higher friction for traction. mu1 along motion, mu2 lateral. -->
+    <gazebo reference="scout_${prefix}_wheel_link">
+      <mu1>1.2</mu1>
+      <mu2>1.0</mu2>
+      <kp>1000000.0</kp>
+      <kd>100.0</kd>
+      <minDepth>0.001</minDepth>
+      <material>Gazebo/Black</material>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:drive_wheel prefix="left"  side_y="${ wheel_separation/2}" joint_name="scout_left_wheel_joint"/>
+  <xacro:drive_wheel prefix="right" side_y="${-wheel_separation/2}" joint_name="scout_right_wheel_joint"/>
+
+  <!-- =========================================================================
+       LINK: scout_caster_link - passive rear ball, low friction, supports balance.
+       ========================================================================= -->
+  <link name="scout_caster_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+      <material name="scout_grey">
+        <color rgba="0.40 0.40 0.40 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+    </collision>
+    <xacro:sphere_inertia m="${caster_mass}" r="${caster_radius}"/>
+  </link>
+
+  <joint name="scout_caster_joint" type="fixed">
+    <parent link="scout_base_link"/>
+    <child  link="scout_caster_link"/>
+    <origin xyz="${-chassis_length/2 + caster_radius} 0
+                 ${-chassis_height/2 + caster_radius - (wheel_radius - caster_radius)}"
+            rpy="0 0 0"/>
+  </joint>
+
+  <!-- Very low friction so the caster rolls/slides freely; otherwise it acts
+       as a brake and prevents in-place rotation. -->
+  <gazebo reference="scout_caster_link">
+    <mu1>0.01</mu1>
+    <mu2>0.01</mu2>
+    <kp>500000.0</kp>
+    <kd>10.0</kd>
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <!-- =========================================================================
+       LINK: scout_imu_link - placeholder mounting point. Even though the
+       navigator currently relies on diff-drive odometry only, exposing an
+       IMU link makes it trivial to fuse later (robot_localization).
+       ========================================================================= -->
+  <link name="scout_imu_link"/>
+  <joint name="scout_imu_joint" type="fixed">
+    <parent link="scout_base_link"/>
+    <child  link="scout_imu_link"/>
+    <origin xyz="0 0 ${chassis_height/2 + 0.005}" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="scout_base_link">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+
+  <!-- =========================================================================
+       ros2_control hardware interface declaration.
+       Both wheels expose a velocity command and position+velocity state.
+       gazebo_ros2_control reads this block and binds it to GazeboSystem.
+       ========================================================================= -->
+  <ros2_control name="ScoutbotGazeboSystem" type="system">
+    <hardware>
+      <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+    </hardware>
+
+    <joint name="scout_left_wheel_joint">
+      <command_interface name="velocity">
+        <param name="min">-20.0</param>
+        <param name="max"> 20.0</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="scout_right_wheel_joint">
+      <command_interface name="velocity">
+        <param name="min">-20.0</param>
+        <param name="max"> 20.0</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+  <!-- =========================================================================
+       gazebo_ros2_control plugin: instantiates a controller_manager INSIDE
+       Gazebo. The <parameters> tag points to controllers.yaml so the
+       controller_manager has its full config the moment it is born -
+       this is the structural fix for the previous "controller stuck in
+       waiting" failure mode.
+       ========================================================================= -->
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>$(arg controllers_yaml)</parameters>
+      <ros>
+        <namespace>/scoutbot</namespace>
+      </ros>
+    </plugin>
+  </gazebo>
+
+</robot>

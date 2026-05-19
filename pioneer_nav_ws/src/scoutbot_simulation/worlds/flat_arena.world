@@ -1,0 +1,52 @@
+<?xml version="1.0" ?>
+<!-- ============================================================================
+     flat_arena.world
+     A 20 m x 20 m flat arena for waypoint-navigation testing. Deliberately
+     empty: no obstacles, no shelves, no markers - a controlled environment
+     where we can isolate AGV behaviour from collision artefacts.
+     ============================================================================ -->
+<sdf version="1.6">
+  <world name="flat_arena">
+
+    <!-- ROS-Gazebo bridges (init + factory). Loaded again from CLI by the
+         launch file, but declaring them in the world makes the file usable
+         standalone via 'gazebo flat_arena.world'. -->
+    <plugin name="gazebo_ros_init"    filename="libgazebo_ros_init.so"/>
+    <plugin name="gazebo_ros_factory" filename="libgazebo_ros_factory.so"/>
+
+    <!-- Standard sun light. -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <!-- Standard infinite ground plane (textured grey). -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!-- Physics: ODE @ 1000 Hz, real-time factor 1.0. The 1 ms step is
+         small enough that 100 Hz controller_manager + 50 Hz nav loop both
+         see fresh state. -->
+    <physics name="default_physics" default="0" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <!-- Cosmetic: scenery. -->
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- Default camera viewpoint (top-back-right). -->
+    <gui fullscreen="0">
+      <camera name="user_camera">
+        <pose>-5 -5 5 0 0.5 0.785</pose>
+        <view_controller>orbit</view_controller>
+      </camera>
+    </gui>
+
+  </world>
+</sdf>

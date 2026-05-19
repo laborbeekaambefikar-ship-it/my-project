@@ -1,0 +1,15 @@
+# =============================================================================
+# waypoints.yaml
+# A small demo mission that exercises every state in the FSM:
+#   1. forward 2 m              -> ALIGN_HEADING (0 rot) + DRIVE
+#   2. up to (2, 2)             -> ALIGN_HEADING (90 deg rot) + DRIVE
+#   3. back to origin with yaw  -> exercises ALIGN_FINAL with target_yaw
+#
+# Coordinates are in the scout_odom frame (the diff_drive_controller's odom
+# frame). target_yaw is in radians, range (-pi, pi]. tolerance is in metres
+# and overrides goal_tolerance for that one waypoint when > 0.
+# =============================================================================
+waypoints:
+  - {x: 2.0, y: 0.0}                              # ahead 2 m, no final yaw
+  - {x: 2.0, y: 2.0}                              # left 2 m
+  - {x: 0.0, y: 0.0, target_yaw: 0.0, tolerance: 0.10}   # back home, face +X, looser tol
