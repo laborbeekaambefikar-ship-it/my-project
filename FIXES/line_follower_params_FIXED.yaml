@@ -1,0 +1,13 @@
+line_follower_node:
+  ros__parameters:
+    # Speed — increased because warehouse is 15m long
+    linear_speed: 0.50          # m/s (was 0.30 — too slow for the warehouse scale)
+    
+    # PID gains — RECALIBRATED for [-1, +1] offset range
+    # Old values (0.012, 0, 0.004) were tuned for offset * 100 = broken
+    kp: 0.50                    # proportional (was 0.012 — needed 40x increase after removing *100)
+    ki: 0.00                    # integral (keep at 0 unless you see steady drift)
+    kd: 0.15                    # derivative (smooths oscillation)
+    
+    # Behavior
+    enabled: true               # controlled by state_machine_node
